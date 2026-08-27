@@ -1,7 +1,7 @@
 {
-  "name": "bot-ig-discord",
+  "name": "zyphor-ig-bot",
   "version": "1.0.0",
-  "description": "Bot estilo feed do Instagram para Discord com sistema de curtidas e configuração de canal.",
+  "description": "Bot estilo feed do Instagram com cooldown, stream status e sistema de curtidas.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -11,12 +11,13 @@
     "bot",
     "discord.js",
     "instagram",
-    "embed"
+    "zyphor"
   ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "discord.js": "^14.18.0"
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.4.5"
   },
   "engines": {
     "node": ">=18.0.0"
