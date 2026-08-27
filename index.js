@@ -6,7 +6,7 @@ const {
 let canalConfiguradoId = null;
 const DONOS_PERMITIDOS = ['1541239768010981378', '1533306874513068093'];
 
-// Armazena quem curtiu cada publicação para gerenciar os cliques
+// Guardador de curtidas dinâmico por mensagem
 const curtidasPorPost = new Map();
 
 const client = new Client({
@@ -29,7 +29,7 @@ client.on('ready', async () => {
   ];
 
   await client.application.commands.set(commands);
-  console.log(`🤖 Bot online como ${client.user.tag}!`);
+  console.log(`🤖 Bot online com sucesso como ${client.user.tag}!`);
 });
 
 client.on('interactionCreate', async (interaction) => {
@@ -91,7 +91,7 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// Leitor de mensagens enviadas no canal configurado
+// Processamento de mensagens do canal
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   if (!canalConfiguradoId || message.channel.id !== canalConfiguradoId) return;
@@ -124,5 +124,5 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Insira o seu Token diretamente entre as aspas simples abaixo
-client.login('SEU_TOKEN_AQUI');
+// Puxa a variável de ambiente (Certifique-se de que o nome no painel é TOKEN ou DISCORD_TOKEN)
+client.login(process.env.TOKEN || process.env.DISCORD_TOKEN);
