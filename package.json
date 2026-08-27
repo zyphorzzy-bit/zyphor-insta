@@ -1,0 +1,24 @@
+{
+  "name": "bot-ig-discord",
+  "version": "1.0.0",
+  "description": "Bot estilo feed do Instagram para Discord com sistema de curtidas e configuração de canal.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "discord.js",
+    "instagram",
+    "embed"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^14.18.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
