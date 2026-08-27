@@ -6,7 +6,7 @@ const {
 let canalConfiguradoId = null;
 const DONOS_PERMITIDOS = ['1541239768010981378', '1533306874513068093'];
 
-// Estrutura para salvar quem curtiu cada post: { messageId: Set(userIds) }
+// Armazena quem curtiu cada publicação para gerenciar os cliques
 const curtidasPorPost = new Map();
 
 const client = new Client({
@@ -29,7 +29,7 @@ client.on('ready', async () => {
   ];
 
   await client.application.commands.set(commands);
-  console.log('Bot pronto!');
+  console.log(`🤖 Bot online como ${client.user.tag}!`);
 });
 
 client.on('interactionCreate', async (interaction) => {
@@ -45,7 +45,7 @@ client.on('interactionCreate', async (interaction) => {
     return interaction.reply({ content: `✅ Canal ${canal} configurado com sucesso!`, ephemeral: true });
   }
 
-  // 2. Sistema de Curtir/Descurtir (1 clique curte, 2 cliques remove)
+  // 2. Sistema de Curtir/Descurtir
   if (interaction.isButton() && interaction.customId === 'like_button') {
     const msgId = interaction.message.id;
     
@@ -57,14 +57,13 @@ client.on('interactionCreate', async (interaction) => {
     const userId = interaction.user.id;
 
     if (listaCurtidas.has(userId)) {
-      listaCurtidas.delete(userId); // Remove se já tinha curtido
+      listaCurtidas.delete(userId);
     } else {
-      listaCurtidas.add(userId); // Adiciona a curtida
+      listaCurtidas.add(userId);
     }
 
     const totalCurtidas = listaCurtidas.size;
 
-    // Atualiza o botão com o novo número de curtidas
     const rowAtualizada = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('like_button')
@@ -78,7 +77,7 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.update({ components: [rowAtualizada] });
   }
 
-  // 3. Ação do Botão Deletar (Apenas autor ou donos do bot)
+  // 3. Botão de Apagar
   if (interaction.isButton() && interaction.customId.startsWith('delete_')) {
     const autorId = interaction.customId.split('_')[1];
     const eDono = DONOS_PERMITIDOS.includes(interaction.user.id);
@@ -92,7 +91,7 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// Processa o envio das imagens no canal configurado
+// Leitor de mensagens enviadas no canal configurado
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   if (!canalConfiguradoId || message.channel.id !== canalConfiguradoId) return;
@@ -107,7 +106,6 @@ client.on('messageCreate', async (message) => {
       .setImage(anexo.url)
       .setColor('#2b2d31');
 
-    // Apresenta apenas os botões de Curtida e Apagar
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('like_button')
@@ -126,4 +124,5 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-client.login('SEU_BOT_TOKEN_AQUI');
+// Insira o seu Token diretamente entre as aspas simples abaixo
+client.login('SEU_TOKEN_AQUI');
