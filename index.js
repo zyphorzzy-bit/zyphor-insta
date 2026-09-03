@@ -31,15 +31,15 @@ client.on('ready', async () => {
   const commands = [
     new SlashCommandBuilder()
       .setName('config')
-      .setDescription('Define o canal oficial para o feed de fotos.')
+      .setDescription('Define o canal oficial para o feed de mídias.')
       .addChannelOption(option => 
         option.setName('canal')
-          .setDescription('Selecione o canal das fotos')
+          .setDescription('Selecione o canal das mídias')
           .setRequired(true))
   ];
 
   await client.application.commands.set(commands);
-  console.log(`🤖 Bot online com sucesso como ${client.user.tag}!`);
+  console.log(`🤖 Bot online com componentes V2 como ${client.user.tag}!`);
 });
 
 client.on('interactionCreate', async (interaction) => {
@@ -53,6 +53,7 @@ client.on('interactionCreate', async (interaction) => {
     return interaction.reply({ content: `✅ Canal ${canal} configurado com sucesso!`, ephemeral: true });
   }
 
+  // Interação dos Botões V2
   if (interaction.isButton() && interaction.customId === 'like_button') {
     const msgId = interaction.message.id;
     
@@ -71,7 +72,8 @@ client.on('interactionCreate', async (interaction) => {
 
     const totalCurtidas = listaCurtidas.size;
 
-    const rowAtualizada = new ActionRowBuilder().addComponents(
+    // Atualização usando a ActionRow de Componentes V2
+    const rowAtualizada = new ActionRowBuilder().setComponents([
       new ButtonBuilder()
         .setCustomId('like_button')
         .setLabel(totalCurtidas.toString())
@@ -79,7 +81,7 @@ client.on('interactionCreate', async (interaction) => {
         .setStyle(ButtonStyle.Secondary),
 
       ButtonBuilder.from(interaction.message.components[0].components[1])
-    );
+    ]);
 
     await interaction.update({ components: [rowAtualizada] });
   }
@@ -92,7 +94,7 @@ client.on('interactionCreate', async (interaction) => {
       curtidasPorPost.delete(interaction.message.id);
       await interaction.message.delete();
     } else {
-      await interaction.reply({ content: '❌ Apenas o autor da foto ou os donos podem apagar!', ephemeral: true });
+      await interaction.reply({ content: '❌ Apenas o autor ou os donos podem apagar!', ephemeral: true });
     }
   }
 });
@@ -102,9 +104,12 @@ client.on('messageCreate', async (message) => {
   if (!canalConfiguradoId || message.channel.id !== canalConfiguradoId) return;
 
   const anexo = message.attachments.first();
-  const eImagem = anexo && anexo.contentType?.startsWith('image/');
+  if (!anexo) return;
 
-  if (eImagem) {
+  const eImagem = anexo.contentType?.startsWith('image/');
+  const eVideo = anexo.contentType?.startsWith('video/');
+
+  if (eImagem || eVideo) {
     const userId = message.author.id;
     const agora = Date.now();
     const tempoCooldown = 5 * 60 * 1000;
@@ -116,7 +121,7 @@ client.on('messageCreate', async (message) => {
         const tempoRestante = Math.ceil((proximoEnvio - agora) / 1000 / 60);
         await message.delete();
         
-        const aviso = await message.channel.send(`⏳ <@${userId}>, aguarde **${tempoRestante} min** para postar outra foto!`);
+        const aviso = await message.channel.send(`⏳ <@${userId}>, aguarde **${tempoRestante} min** para postar novamente!`);
         setTimeout(() => aviso.delete().catch(() => {}), 5000);
         return;
       }
@@ -124,16 +129,8 @@ client.on('messageCreate', async (message) => {
 
     cooldowns.set(userId, agora);
 
-    // Reenvia o anexo diretamente para não quebrar o link da imagem
-    const arquivoImagem = new AttachmentBuilder(anexo.url, { name: 'imagem.png' });
-
-    const embed = new EmbedBuilder()
-      .setTitle('IG')
-      .setDescription(`@${message.author.username}`)
-      .setImage('attachment://imagem.png') // Conecta ao anexo reenviado
-      .setColor('#2b2d31'); // Cor escura para combinar com a interface do Discord
-
-    const row = new ActionRowBuilder().addComponents(
+    // Componentes V2 estruturados via setComponents
+    const rowV2 = new ActionRowBuilder().setComponents([
       new ButtonBuilder()
         .setCustomId('like_button')
         .setLabel('0')
@@ -144,9 +141,27 @@ client.on('messageCreate', async (message) => {
         .setCustomId(`delete_${message.author.id}`)
         .setEmoji('1542398876873400350')
         .setStyle(ButtonStyle.Secondary)
-    );
+    ]);
 
-    await message.channel.send({ embeds: [embed], files: [arquivoImagem], components: [row] });
+    if (eImagem) {
+      const arquivoImagem = new AttachmentBuilder(anexo.url, { name: 'midia.png' });
+      const embed = new EmbedBuilder()
+        .setTitle('IG')
+        .setDescription(`@${message.author.username}`)
+        .setImage('attachment://midia.png')
+        .setColor('#2b2d31');
+
+      await message.channel.send({ embeds: [embed], files: [arquivoImagem], components: [rowV2] });
+    } else if (eVideo) {
+      const arquivoVideo = new AttachmentBuilder(anexo.url, { name: 'midia.mp4' });
+
+      await message.channel.send({ 
+        content: `**IG**\n@${message.author.username}`, 
+        files: [arquivoVideo], 
+        components: [rowV2] 
+      });
+    }
+
     await message.delete();
   }
 });
