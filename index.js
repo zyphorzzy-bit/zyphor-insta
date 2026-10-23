@@ -6,740 +6,1472 @@ const {
   REST,
   Routes,
   SlashCommandBuilder,
+  PermissionFlagsBits,
   ChannelType,
+  ActivityType,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
+  ChannelSelectMenuBuilder,
+  RoleSelectMenuBuilder,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  AttachmentBuilder
-} = require("discord.js");
+  MessageFlags
+} = require('discord.js');
 
-const fs = require("node:fs");
-const path = require("node:path");
+const fs = require('node:fs');
+const path = require('node:path');
 
-// ==================== CONFIGURAÇÃO ====================
+const OWNER_ID = '1533306874513068093';
+const ADMIN_ID = '1541239768010981378';
+const DATA_FILE = path.join(__dirname, 'data.json');
 
-const TOKEN = process.env.DISCORD_TOKEN;
-const DONA_ID = "1541239768010981378";
-const DONO_ID = "1533306874513068093";
-const DONOS = [DONA_ID, DONO_ID];
-
-const DATA_PATH = path.join(__dirname, "data.json");
-const COOLDOWN = 5 * 60 * 1000;
-
-const EMOJIS_PADRAO = {
-  like: "<:like:1552007813709172766>",
-  lixo: "<:lixo:1552009637170253894>",
-  insta: "<:insta:1552009638487138427>",
-  corao: "<:corao:1552010611393700011>",
-  link: "<:link:1552009621999452160>",
-  posse: "<:posse:1552007807535153262>",
-  digitar: "<:digitar:1550347102662434857>",
-  cometrio: "<:cometrio:1552009642081788016>",
-  config: "<:config:1552010601688080457>"
-};
-
-const DADOS_PADRAO = {
+const DEFAULTS = {
   canalId: null,
   posts: {},
   cooldowns: {},
-  emojis: EMOJIS_PADRAO,
+  warnings: {},
+  emojis: {
+    like: '<:like:1552007813709172766>',
+    lixo: '<:lixo:1552009637170253894>',
+    insta: '<:insta:1552009638487138427>',
+    corao: '<:corao:1552010611393700011>',
+    link: '<:link:1552009621999452160>',
+    posse: '<:posse:1552007807535153262>',
+    digitar: '<:digitar:1550347102662434857>',
+    cometrio: '<:cometrio:1552009642081788016>',
+    config: '<:config:1552010601688080457>'
+  },
+  moderacao: {
+    emojisFixos: {
+      ban: '<:ban:1552761935945277472>',
+      seguranca: '<:security:1552010618163167306>',
+      escudo: '<:escudo:1552508771228450856>',
+      alerta: '<a:alerta:1552007804569653360>',
+      warn1: '<:warn1:1550347449925894196>',
+      warn2: '<:warn2:1550347452446408754>',
+      warn3: '<:warn3:1550347451070943254>',
+      aceito: '<:aceito:1552508777943539843>',
+      recusado: '<:recusado:1552508774462398484>',
+      proibido: '<:proibido:1552010616280064092>',
+      protecao: '<:Secured:1550347097318883360>'
+    },
+    antiBan: {
+      ativo: true,
+      cargoProtegidoId: null,
+      cargoAutorizadoId: null
+    },
+    advertencias: {
+      '1': {
+        cargoId: null,
+        acao: 'warn',
+        duracaoMinutos: 0
+      },
+      '2': {
+        cargoId: null,
+        acao: 'timeout',
+        duracaoMinutos: 10
+      },
+      '3': {
+        cargoId: null,
+        acao: 'kick',
+        duracaoMinutos: 0
+      }
+    },
+    filtros: {
+      antiFlood: true,
+      antiSpam: true,
+      antiGif: false,
+      antiSticker: false,
+      antiRaid: true,
+      antiGrief: false,
+      antiLink: false,
+      antiDelete: true
+    },
+    canalLogsId: null,
+    linkRecurso: null
+  },
+  painel: {
+    canalConfigId: null,
+    mensagemConfigId: null
+  },
   streaming: {
-    canalId: null,
-    titulo: "Ao vivo",
-    descricao: "",
-    link: "",
-    mensagemId: null
+    titulo: 'Ao vivo',
+    descricao: '',
+    link: 'https://twitch.tv/',
+    ativo: false
   }
 };
 
-function carregarDados() {
-  try {
-    if (fs.existsSync(DATA_PATH)) {
-      const salvos = JSON.parse(fs.readFileSync(DATA_PATH, "utf8"));
-      return {
-        ...DADOS_PADRAO,
-        ...salvos,
-        posts: salvos.posts || {},
-        cooldowns: salvos.cooldowns || {},
-        emojis: { ...EMOJIS_PADRAO, ...(salvos.emojis || {}) },
-        streaming: {
-          ...DADOS_PADRAO.streaming,
-          ...(salvos.streaming || {})
-        }
-      };
+function mergeDefaults(base, saved) {
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) {
+    return structuredClone(base);
+  }
+
+  const out = { ...base, ...saved };
+
+  for (const key of Object.keys(base)) {
+    if (
+      base[key] &&
+      typeof base[key] === 'object' &&
+      !Array.isArray(base[key])
+    ) {
+      out[key] = mergeDefaults(base[key], saved[key]);
     }
-  } catch (erro) {
-    console.error("Erro ao ler data.json:", erro);
   }
 
-  return JSON.parse(JSON.stringify(DADOS_PADRAO));
+  return out;
 }
 
-let dados = carregarDados();
+function saveData() {
+  fs.writeFileSync(
+    DATA_FILE,
+    JSON.stringify(data, null, 2),
+    'utf8'
+  );
+}
 
-function salvarDados() {
+function loadData() {
   try {
-    fs.writeFileSync(DATA_PATH, JSON.stringify(dados, null, 2));
-  } catch (erro) {
-    console.error("Não consegui salvar data.json:", erro);
+    return mergeDefaults(
+      DEFAULTS,
+      JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'))
+    );
+  } catch {
+    const initial = structuredClone(DEFAULTS);
+    fs.writeFileSync(
+      DATA_FILE,
+      JSON.stringify(initial, null, 2),
+      'utf8'
+    );
+    return initial;
   }
 }
 
-function dono(interaction) {
-  return DONOS.includes(interaction.user.id);
+let data = loadData();
+
+function isOwner(id) {
+  return id === OWNER_ID;
 }
 
-function emoji(nome) {
-  return dados.emojis[nome] || "•";
+function isAdmin(id) {
+  return id === OWNER_ID || id === ADMIN_ID;
 }
 
-function idEmoji(valor) {
-  const encontrado = String(valor).match(/<a?:\w+:(\d+)>|^(\d{15,})$/);
-  return encontrado ? encontrado[1] || encontrado[2] : null;
+function canConfigure(interaction) {
+  return (
+    isAdmin(interaction.user.id) ||
+    interaction.memberPermissions?.has(
+      PermissionFlagsBits.Administrator
+    )
+  );
 }
 
-function botaoEmoji(customId, nome, texto, estilo = ButtonStyle.Secondary) {
-  const botao = new ButtonBuilder()
-    .setCustomId(customId)
-    .setLabel(texto)
-    .setStyle(estilo);
-
-  const id = idEmoji(emoji(nome));
-  if (id) botao.setEmoji(id);
-
-  return botao;
+function safeReason(text) {
+  return (text || 'Nenhum motivo informado').slice(0, 450);
 }
 
-function temporario(interaction, conteudo) {
-  return interaction.reply({
-    content: conteudo,
-    ephemeral: true
+function parseTarget(message) {
+  return (
+    message.mentions.members.first() ||
+    message.guild.members.cache.get(
+      message.content.split(/\s+/)[1]?.replace(/[<@!>]/g, '')
+    )
+  );
+}
+
+function isProtected(target) {
+  const cfg = data.moderacao.antiBan;
+
+  return Boolean(
+    cfg.ativo &&
+    cfg.cargoProtegidoId &&
+    target.roles.cache.has(cfg.cargoProtegidoId)
+  );
+}
+
+function canOverrideProtection(member) {
+  const roleId = data.moderacao.antiBan.cargoAutorizadoId;
+
+  return (
+    member?.id === OWNER_ID ||
+    Boolean(roleId && member?.roles?.cache?.has(roleId))
+  );
+}
+
+async function logAction(guild, text) {
+  const channelId = data.moderacao.canalLogsId;
+  if (!channelId) return;
+
+  const channel = guild.channels.cache.get(channelId);
+  if (!channel?.isTextBased()) return;
+
+  try {
+    await channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x6d28d9)
+          .setDescription(text)
+      ],
+      allowedMentions: { parse: [] }
+    });
+  } catch (error) {
+    console.error('Falha ao registrar log:', error.message);
+  }
+}
+
+async function replyEphemeral(interaction, content) {
+  const payload = {
+    content,
+    allowedMentions: { parse: [] },
+    flags: MessageFlags.Ephemeral
+  };
+
+  if (interaction.deferred || interaction.replied) {
+    return interaction.followUp(payload);
+  }
+
+  return interaction.reply(payload);
+}
+
+function configEmbed() {
+  return new EmbedBuilder()
+    .setColor(0x6d28d9)
+    .setTitle('Zyphor Bot • Configuração')
+    .setDescription([
+      'Selecione uma área no menu abaixo.',
+      '',
+      '• Canal do feed',
+      '• Canal de logs',
+      '• Anti-ban e cargos protegidos',
+      '• Filtros de mensagens',
+      '• Emojis do Instagram',
+      '• Advertências e punições',
+      '• Link de recurso de banimento',
+      '',
+      'Os canais e cargos são selecionados nos menus.'
+    ].join('\n'));
+}
+
+function configMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('cfg:area')
+      .setPlaceholder('Escolha uma área')
+      .addOptions(
+        {
+          label: 'Canal do feed',
+          value: 'feed'
+        },
+        {
+          label: 'Canal de logs',
+          value: 'logs'
+        },
+        {
+          label: 'Anti-ban',
+          value: 'antiban'
+        },
+        {
+          label: 'Filtros',
+          value: 'filtros'
+        },
+        {
+          label: 'Emojis do Instagram',
+          value: 'emojis'
+        },
+        {
+          label: 'Advertências',
+          value: 'warns'
+        },
+        {
+          label: 'Mensagem de banimento',
+          value: 'banmsg'
+        }
+      )
+  );
+}
+
+function toggleFilterMenu() {
+  const filters = data.moderacao.filtros;
+
+  const labels = {
+    antiFlood: 'Anti-flood',
+    antiSpam: 'Anti-spam',
+    antiGif: 'Anti-GIF',
+    antiSticker: 'Anti-sticker',
+    antiRaid: 'Anti-raid',
+    antiGrief: 'Anti-grief',
+    antiLink: 'Anti-link',
+    antiDelete: 'Registro de exclusões'
+  };
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('cfg:togglefilter')
+      .setPlaceholder('Selecione um filtro')
+      .addOptions(
+        Object.entries(labels).map(([value, label]) => ({
+          label: `${filters[value] ? '🟢' : '⚪'} ${label}`,
+          value,
+          description: filters[value]
+            ? 'Atualmente ativado'
+            : 'Atualmente desativado'
+        }))
+      )
+  );
+}
+
+function emojisText() {
+  return Object.entries(data.emojis)
+    .map(([key, value]) => `**${key}** — ${value}`)
+    .join('\n');
+}
+
+async function updateStreamingPresence() {
+  if (!data.streaming.ativo) {
+    client.user.setPresence({
+      activities: [],
+      status: 'online'
+    });
+    return;
+  }
+
+  client.user.setPresence({
+    activities: [{
+      name: data.streaming.titulo || 'Ao vivo',
+      type: ActivityType.Streaming,
+      url: data.streaming.link || 'https://twitch.tv/'
+    }],
+    status: 'online'
   });
 }
-
-// ==================== CLIENTE ====================
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildModeration,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.DirectMessages
   ],
-  partials: [Partials.Channel, Partials.Message]
+  partials: [
+    Partials.Channel,
+    Partials.Message,
+    Partials.User
+  ]
 });
 
-// ==================== COMANDOS ====================
-
-const comandos = [
+const slashCommands = [
   new SlashCommandBuilder()
-    .setName("config")
-    .setDescription("Configura o canal do feed da Zyphor.")
-    .addChannelOption(opcao =>
-      opcao
-        .setName("canal")
-        .setDescription("Canal onde as mídias serão publicadas.")
-        .addChannelTypes(ChannelType.GuildText)
-        .setRequired(true)
+    .setName('config')
+    .setDescription('Abre o painel do Zyphor Bot')
+    .setDefaultMemberPermissions(
+      PermissionFlagsBits.Administrator
     )
-].map(comando => comando.toJSON());
+    .setDMPermission(false)
+].map(command => command.toJSON());
 
-client.once("ready", async () => {
+client.once('ready', async () => {
   console.log(`Zyphor Bot conectado como ${client.user.tag}`);
 
   try {
-    const rest = new REST({ version: "10" }).setToken(TOKEN);
+    const rest = new REST({ version: '10' })
+      .setToken(process.env.DISCORD_TOKEN);
+
     await rest.put(
       Routes.applicationCommands(client.user.id),
-      { body: comandos }
+      { body: slashCommands }
     );
-    console.log("Comando /config registrado.");
-  } catch (erro) {
-    console.error("Erro ao registrar comandos:", erro);
+
+    console.log('/config registrado.');
+  } catch (error) {
+    console.error('Erro registrando /config:', error.message);
   }
 
-  client.user.setActivity("o feed da Zyphor");
+  await updateStreamingPresence().catch(console.error);
 });
+client.on('messageCreate', async message => {
+  if (message.author.bot || !message.guild) return;
 
-// ==================== BOTÕES DO FEED ====================
+  const prefix = 'c!';
+  const content = message.content.trim();
+  const lower = content.toLowerCase();
 
-function botoesFeed(postId, post) {
-  const linha = new ActionRowBuilder().addComponents(
-    botaoEmoji(
-      `like:${postId}`,
-      "like",
-      `Curtir (${post.likes.length})`,
-      post.likes.length ? ButtonStyle.Primary : ButtonStyle.Secondary
-    ),
-    botaoEmoji(`comment:${postId}`, "cometrio", "Comentar"),
-    botaoEmoji(`options:${postId}`, "config", "Opções")
-  );
-
-  const linhas = [linha];
-
-  if (post.linkEnabled && post.linkUrl) {
-    const link = new ButtonBuilder()
-      .setLabel("Abrir link")
-      .setStyle(ButtonStyle.Link)
-      .setURL(post.linkUrl);
-
-    const id = idEmoji(emoji("link"));
-    if (id) link.setEmoji(id);
-
-    linhas.push(new ActionRowBuilder().addComponents(link));
-  }
-
-  return linhas;
-}
-
-function embedPost(post) {
-  const embed = new EmbedBuilder()
-    .setColor(0x242424)
-    .setAuthor({
-      name: post.authorName || "Usuário",
-      iconURL: post.authorAvatar || undefined
-    })
-    .setFooter({ text: `Zyphor Feed • ${post.likes.length} curtida(s)` })
-    .setTimestamp(new Date(post.createdAt || Date.now()));
-
-  if (post.description) {
-    embed.setDescription(post.description.slice(0, 4000));
-  }
-
-  if (post.mediaUrl && post.mediaType?.startsWith("image/")) {
-    embed.setImage(post.mediaUrl);
-  }
-
-  return embed;
-}
-
-// ==================== RECEBER MÍDIAS ====================
-
-client.on("messageCreate", async message => {
-  if (!message.guild || message.author.bot) return;
-  if (!dados.canalId || message.channel.id !== dados.canalId) return;
-
-  const midia = message.attachments.find(arquivo =>
-    arquivo.contentType?.startsWith("image/") ||
-    arquivo.contentType?.startsWith("video/")
-  );
-
-  if (!midia) {
+  // Sistema básico de feed para mídias.
+  if (
+    data.canalId &&
+    message.channel.id === data.canalId &&
+    message.attachments.size
+  ) {
     try {
-      await message.delete();
-      const aviso = await message.channel.send({
-        content: `${message.author}, este canal aceita somente imagens e vídeos.`
-      });
-      setTimeout(() => aviso.delete().catch(() => {}), 5000);
-    } catch (erro) {
-      console.error("Não consegui moderar a mensagem:", erro);
+      const files = [];
+
+      for (const attachment of message.attachments.values()) {
+        const type = attachment.contentType || '';
+
+        if (
+          !type.startsWith('image/') &&
+          !type.startsWith('video/')
+        ) continue;
+
+        const response = await fetch(attachment.url);
+
+        if (!response.ok) {
+          throw new Error('Não foi possível baixar a mídia.');
+        }
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+
+        files.push({
+          attachment: buffer,
+          name: (attachment.name || 'upload.bin')
+            .replace(/[^\w.-]/g, '_')
+        });
+      }
+
+      if (files.length) {
+        const embed = new EmbedBuilder()
+          .setColor(0x6d28d9)
+          .setAuthor({
+            name: message.author.username,
+            iconURL: message.author.displayAvatarURL()
+          })
+          .setDescription(`Publicado por <@${message.author.id}>`)
+          .setTimestamp();
+
+        const imageFile = files.find(file =>
+          /\.(png|jpe?g|webp)$/i.test(file.name)
+        );
+
+        if (imageFile) {
+          embed.setImage(`attachment://${imageFile.name}`);
+        }
+
+        await message.channel.send({
+          embeds: [embed],
+          files,
+          allowedMentions: { parse: [] }
+        });
+      }
+    } catch (error) {
+      console.error('Erro no feed:', error.message);
+
+      try {
+        await message.reply(
+          'Não consegui publicar a mídia. A mensagem original foi mantida.'
+        );
+      } catch {}
     }
+  }
+
+  // Filtros básicos.
+  const filters = data.moderacao.filtros;
+  const member = message.member;
+
+  if (
+    member &&
+    !member.permissions.has(PermissionFlagsBits.ManageMessages)
+  ) {
+    const key = `${message.guild.id}:${message.author.id}`;
+    const recent = data.cooldowns[key] || [];
+
+    const recentNow = recent.filter(
+      timestamp => Date.now() - timestamp < 6000
+    );
+
+    recentNow.push(Date.now());
+    data.cooldowns[key] = recentNow;
+
+    let violation = '';
+
+    if (filters.antiFlood && recentNow.length >= 6) {
+      violation = 'Anti-flood: muitas mensagens em pouco tempo.';
+    }
+
+    if (
+      filters.antiGif &&
+      [...message.attachments.values()].some(
+        attachment => attachment.name?.toLowerCase().endsWith('.gif')
+      )
+    ) {
+      violation = 'GIFs não são permitidos.';
+    }
+
+    if (filters.antiSticker && message.stickers.size > 0) {
+      violation = 'Figurinhas não são permitidas.';
+    }
+
+    if (
+      filters.antiLink &&
+      /(https?:\/\/|discord\.gg\/)/i.test(content)
+    ) {
+      violation = 'Links não são permitidos.';
+    }
+
+    if (violation) {
+      try {
+        await message.delete();
+      } catch {}
+
+      await logAction(
+        message.guild,
+        `⚠️ ${message.author.tag}: ${violation}`
+      );
+
+      saveData();
+      return;
+    }
+
+    saveData();
+  }
+
+  if (!lower.startsWith(prefix)) return;
+
+  const args = content
+    .slice(prefix.length)
+    .trim()
+    .split(/\s+/);
+
+  const cmd = (args.shift() || '').toLowerCase();
+
+  if (!cmd) return;
+
+  // Painel privado de streaming: somente o dono principal.
+  if (cmd === 's') {
+    if (!isOwner(message.author.id)) {
+      return message.reply(
+        'Somente o dono principal pode usar `c!s`.'
+      );
+    }
+
+    try {
+      const dm = await message.author.createDM();
+
+      const embed = new EmbedBuilder()
+        .setColor(0x6d28d9)
+        .setTitle('Zyphor • Painel privado de streaming')
+        .setDescription(
+          `**Ativo:** ${data.streaming.ativo ? 'Sim' : 'Não'}\n` +
+          `**Título:** ${data.streaming.titulo}\n` +
+          `**Descrição:** ${data.streaming.descricao || '—'}\n` +
+          `**Link:** ${data.streaming.link}`
+        );
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('stream:edit')
+          .setLabel('Editar dados')
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId('stream:toggle')
+          .setLabel(data.streaming.ativo ? 'Desativar' : 'Ativar')
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      await dm.send({
+        embeds: [embed],
+        components: [row]
+      });
+
+      await message.reply('Enviei o painel no seu privado.');
+    } catch {
+      await message.reply(
+        'Não consegui abrir seu privado. Confira as configurações de mensagens diretas.'
+      );
+    }
+
     return;
   }
 
-  const ultimo = Number(dados.cooldowns[message.author.id] || 0);
-  const agora = Date.now();
+  if (cmd === 'config') {
+    if (!isAdmin(message.author.id)) {
+      return message.reply('Você não tem acesso a esse comando.');
+    }
 
-  if (!DONOS.includes(message.author.id) && agora - ultimo < COOLDOWN) {
-    const restante = Math.ceil((COOLDOWN - (agora - ultimo)) / 1000);
+    return message.reply('Use `/config` para abrir o painel.');
+  }
+
+  const moderationCommands = [
+    'ban',
+    'kick',
+    'warn',
+    'warnings',
+    'unwarn',
+    'timeout'
+  ];
+
+  if (!moderationCommands.includes(cmd)) return;
+
+  if (
+    !isAdmin(message.author.id) &&
+    !member?.permissions.has(PermissionFlagsBits.ModerateMembers)
+  ) {
+    return message.reply(
+      'Você não tem permissão para usar esse comando.'
+    );
+  }
+
+  // Consultar advertências.
+  if (cmd === 'warnings') {
+    const target = parseTarget(message);
+
+    if (!target) {
+      return message.reply('Uso: `c!warnings @membro`');
+    }
+
+    const key = `${message.guild.id}:${target.id}`;
+    const list = data.warnings[key] || [];
+
+    if (!list.length) {
+      return message.reply(
+        'Esse membro não tem advertências registradas.'
+      );
+    }
+
+    const description = list.map((warning, index) =>
+      `${index + 1}. ${warning.reason} — ` +
+      `<@${warning.actor}> — ` +
+      `<t:${Math.floor(warning.at / 1000)}:R>`
+    ).join('\n');
+
+    return message.reply({
+      content:
+        `Advertências de **${target.user.tag}**:\n${description}`,
+      allowedMentions: { parse: [] }
+    });
+  }
+
+  // Remover a advertência mais recente.
+  if (cmd === 'unwarn') {
+    const target = parseTarget(message);
+
+    if (!target) {
+      return message.reply('Uso: `c!unwarn @membro`');
+    }
+
+    const key = `${message.guild.id}:${target.id}`;
+    const list = data.warnings[key] || [];
+
+    if (!list.length) {
+      return message.reply('Esse membro não tem advertências.');
+    }
+
+    list.pop();
+    data.warnings[key] = list;
+    saveData();
+
+    return message.reply(
+      `Removi a advertência mais recente de ${target.user.tag}.`
+    );
+  }
+
+  const target = parseTarget(message);
+
+  if (!target) {
+    return message.reply(`Uso: \`c!${cmd} @membro motivo\``);
+  }
+
+  if (target.id === message.author.id) {
+    return message.reply(
+      'Você não pode aplicar essa ação em si mesmo.'
+    );
+  }
+
+  if (
+    target.id === OWNER_ID &&
+    message.author.id !== OWNER_ID
+  ) {
+    return message.reply('Esse membro está protegido.');
+  }
+
+  const reason = safeReason(args.slice(1).join(' '));
+
+  // Banimento.
+  if (cmd === 'ban') {
+    if (
+      isProtected(target) &&
+      !canOverrideProtection(member)
+    ) {
+      return message.reply(
+        'Esse membro possui um cargo protegido pelo anti-ban.'
+      );
+    }
+
+    if (!target.bannable) {
+      return message.reply(
+        'Não consigo banir esse membro. Confira minhas permissões e a hierarquia de cargos.'
+      );
+    }
 
     try {
-      await message.delete();
-      const aviso = await message.channel.send({
-        content: `${message.author}, aguarde ${Math.ceil(restante / 60)} minuto(s) antes de publicar novamente.`
+      const banEmbed = new EmbedBuilder()
+        .setColor(0xd93025)
+        .setTitle(`Banimento — ${message.guild.name}`)
+        .setDescription(
+          `**Motivo:** ${reason}\n` +
+          `**Moderador:** ${message.author.tag}\n` +
+          `**Data:** ${new Date().toLocaleString('pt-BR')}\n` +
+          (
+            data.moderacao.linkRecurso
+              ? `**Recurso:** ${data.moderacao.linkRecurso}`
+              : ''
+          )
+        );
+
+      // Se a DM falhar, o banimento ainda pode continuar.
+      await target.send({
+        embeds: [banEmbed]
+      }).catch(() => {});
+
+      await target.ban({
+        reason: `${reason} | Moderador: ${message.author.tag}`
       });
-      setTimeout(() => aviso.delete().catch(() => {}), 5000);
-    } catch (erro) {
-      console.error("Erro ao aplicar cooldown:", erro);
+
+      await message.reply(`Banido: ${target.user.tag}.`);
+
+      await logAction(
+        message.guild,
+        `🔨 **Ban:** ${target.user.tag}\n` +
+        `**Motivo:** ${reason}\n` +
+        `**Moderador:** ${message.author.tag}`
+      );
+    } catch (error) {
+      return message.reply(
+        `Falha ao banir: ${error.message}`
+      );
     }
+
     return;
   }
 
-  try {
-    const post = {
-      authorId: message.author.id,
-      authorName: message.member?.displayName || message.author.username,
-      authorAvatar: message.author.displayAvatarURL(),
-      mediaUrl: midia.url,
-      mediaType: midia.contentType || "",
-      originalChannelId: message.channel.id,
-      guildId: message.guild.id,
-      likes: [],
-      comments: [],
-      description: "",
-      linkUrl: "",
-      linkEnabled: false,
-      createdAt: agora
+  // Expulsão.
+  if (cmd === 'kick') {
+    if (!target.kickable) {
+      return message.reply(
+        'Não consigo expulsar esse membro. Confira as permissões e a hierarquia.'
+      );
+    }
+
+    await target.kick(reason);
+
+    await message.reply(`Expulso: ${target.user.tag}.`);
+
+    await logAction(
+      message.guild,
+      `👢 **Kick:** ${target.user.tag}\n**Motivo:** ${reason}`
+    );
+
+    return;
+  }
+
+  // Timeout.
+  if (cmd === 'timeout') {
+    const mins = Math.max(
+      1,
+      Math.min(40320, Number(args[1]) || 10)
+    );
+
+    if (!target.moderatable) {
+      return message.reply(
+        'Não consigo aplicar timeout nesse membro.'
+      );
+    }
+
+    await target.timeout(mins * 60 * 1000, reason);
+
+    await message.reply(
+      `Timeout aplicado em ${target.user.tag} por ${mins} minuto(s).`
+    );
+
+    await logAction(
+      message.guild,
+      `⏱️ **Timeout:** ${target.user.tag} por ${mins} min\n` +
+      `**Motivo:** ${reason}`
+    );
+
+    return;
+  }
+
+  // Advertências.
+  if (cmd === 'warn') {
+    const key = `${message.guild.id}:${target.id}`;
+    const list = data.warnings[key] || [];
+
+    list.push({
+      reason,
+      actor: message.author.id,
+      at: Date.now()
+    });
+
+    data.warnings[key] = list;
+
+    const level = Math.min(3, list.length);
+
+    const rule = data.moderacao.advertencias[String(level)] || {
+      acao: 'warn',
+      duracaoMinutos: 0
     };
 
-    const publicado = await message.channel.send({
-      embeds: [embedPost(post)],
-      components: [new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("placeholder")
-          .setLabel("Preparando publicação…")
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(true)
-      )],
-      files: midia.contentType?.startsWith("video/")
-        ? [new AttachmentBuilder(midia.url, { name: midia.name })]
-        : []
-    });
-
-    post.mediaUrl = midia.url;
-    post.mediaMessageId = publicado.id;
-    dados.posts[publicado.id] = post;
-    dados.cooldowns[message.author.id] = agora;
-    salvarDados();
-
-    await publicado.edit({
-      embeds: [embedPost(post)],
-      components: botoesFeed(publicado.id, post),
-      files: []
-    });
-
-    await message.delete().catch(() => {});
-  } catch (erro) {
-    console.error("Erro ao publicar mídia:", erro);
     try {
-      await message.reply("Não consegui publicar essa mídia. Verifique as permissões e o limite de tamanho do Discord.");
-    } catch {}
-  }
-});
-
-// ==================== INTERAÇÕES ====================
-
-client.on("interactionCreate", async interaction => {
-  try {
-    if (interaction.isChatInputCommand()) {
-      if (interaction.commandName === "config") {
-        if (!dono(interaction)) {
-          return temporario(interaction, "Você não tem permissão para usar este comando.");
-        }
-
-        const canal = interaction.options.getChannel("canal", true);
-        dados.canalId = canal.id;
-        salvarDados();
-
-        const painel = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`settings:${interaction.user.id}`)
-            .setLabel("Personalizar emojis")
-            .setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder()
-            .setCustomId(`feedsettings:${interaction.user.id}`)
-            .setLabel("Configurar feed")
-            .setStyle(ButtonStyle.Primary)
+      if (
+        rule.acao === 'timeout' &&
+        target.moderatable
+      ) {
+        await target.timeout(
+          Math.max(1, rule.duracaoMinutos || 10) * 60000,
+          reason
         );
-
-        try {
-          await interaction.user.send({
-            content: `Painel privado da Zyphor Bot.\nCanal do feed configurado: <#${canal.id}>.\nUse os botões abaixo para personalizar as opções.`,
-            components: [painel]
-          });
-          return temporario(interaction, `Feed configurado em ${canal}. Enviei o painel na sua DM.`);
-        } catch {
-          return temporario(interaction, `Feed configurado em ${canal}, mas não consegui enviar a DM. Ative as mensagens diretas para receber o painel.`);
-        }
-      }
-    }
-
-    if (!interaction.isButton()) return;
-
-    const partes = interaction.customId.split(":");
-    const acao = partes[0];
-    const postId = partes[1];
-
-    if (acao === "settings" || acao === "feedsettings") {
-      if (!dono(interaction) || interaction.user.id !== postId) {
-        return temporario(interaction, "Este painel pertence a outro dono do bot.");
+      } else if (
+        rule.acao === 'kick' &&
+        target.kickable
+      ) {
+        await target.kick(reason);
+      } else if (
+        rule.acao === 'ban' &&
+        target.bannable &&
+        (!isProtected(target) || canOverrideProtection(member))
+      ) {
+        await target.ban({ reason });
       }
 
-      if (acao === "settings") {
-        const linha = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId("emoji:like").setLabel("Curtir").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("emoji:cometrio").setLabel("Comentar").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("emoji:config").setLabel("Opções").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("emoji:link").setLabel("Link").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("emoji:lixo").setLabel("Lixo").setStyle(ButtonStyle.Secondary)
-        );
-        const linha2 = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId("emoji:insta").setLabel("Instagram").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("emoji:corao").setLabel("Coração").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("emoji:posse").setLabel("Posse").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("emoji:digitar").setLabel("Digitar").setStyle(ButtonStyle.Secondary)
-        );
-
-        return interaction.reply({
-          content: "Escolha o emoji que deseja alterar. Digite o ID do emoji ou o formato <:nome:id>.",
-          components: [linha, linha2],
-          ephemeral: true
-        });
-      }
-
-      const modal = new ModalBuilder()
-        .setCustomId(`feedmodal:${interaction.user.id}`)
-        .setTitle("Configurações do feed");
-
-      const descricao = new TextInputBuilder()
-        .setCustomId("descricao")
-        .setLabel("Descrição padrão (opcional)")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(false)
-        .setMaxLength(1000);
-
-      const url = new TextInputBuilder()
-        .setCustomId("url")
-        .setLabel("Link padrão (opcional)")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(500);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(descricao),
-        new ActionRowBuilder().addComponents(url)
+      await target.send(
+        `Você recebeu uma advertência em **${message.guild.name}**.\n` +
+        `Motivo: ${reason}`
+      ).catch(() => {});
+    } catch (error) {
+      console.error(
+        'Ação da advertência falhou:',
+        error.message
       );
-
-      return interaction.showModal(modal);
     }
 
-    if (acao === "emoji") {
-      if (!dono(interaction)) {
-        return temporario(interaction, "Sem permissão.");
-      }
+    saveData();
 
-      const nome = postId;
-      const modal = new ModalBuilder()
-        .setCustomId(`emojimodal:${nome}`)
-        .setTitle(`Alterar emoji: ${nome}`);
-
-      const campo = new TextInputBuilder()
-        .setCustomId("valor")
-        .setLabel("ID numérico ou emoji <:nome:id>")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setMaxLength(100)
-        .setValue(dados.emojis[nome] || "");
-
-      modal.addComponents(new ActionRowBuilder().addComponents(campo));
-      return interaction.showModal(modal);
-    }
-
-    const post = dados.posts[postId];
-    if (!post) {
-      return temporario(interaction, "Esta publicação não foi encontrada.");
-    }
-
-    if (acao === "like") {
-      const index = post.likes.indexOf(interaction.user.id);
-      if (index >= 0) post.likes.splice(index, 1);
-      else post.likes.push(interaction.user.id);
-
-      salvarDados();
-      return interaction.update({
-        embeds: [embedPost(post)],
-        components: botoesFeed(postId, post)
-      });
-    }
-
-    if (acao === "comment") {
-      const modal = new ModalBuilder()
-        .setCustomId(`commentmodal:${postId}`)
-        .setTitle("Comentar publicação");
-
-      const campo = new TextInputBuilder()
-        .setCustomId("texto")
-        .setLabel("Seu comentário")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setMaxLength(1000);
-
-      modal.addComponents(new ActionRowBuilder().addComponents(campo));
-      return interaction.showModal(modal);
-    }
-
-    if (acao === "options") {
-      const linha = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`likes:${postId}:0`).setLabel("Ver curtidas").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`comments:${postId}:0`).setLabel("Ver comentários").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`edit:${postId}`).setLabel("Editar publicação").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`delete:${postId}`).setLabel("Excluir").setStyle(ButtonStyle.Danger)
-      );
-
-      return interaction.reply({
-        content: "Opções da publicação:",
-        components: [linha],
-        ephemeral: true
-      });
-    }
-
-    if (acao === "likes" || acao === "comments") {
-      const pagina = Number(partes[2] || 0);
-      const itens = acao === "likes" ? post.likes : post.comments;
-      const tamanho = 10;
-      const fatia = itens.slice(pagina * tamanho, (pagina + 1) * tamanho);
-
-      let texto;
-      if (acao === "likes") {
-        const nomes = await Promise.all(fatia.map(async id => {
-          const usuario = await client.users.fetch(id).catch(() => null);
-          return usuario ? `• ${usuario.username} (<@${id}>)` : `• <@${id}>`;
-        }));
-        texto = nomes.join("\n") || "Ainda não há curtidas.";
-      } else {
-        texto = fatia.map(item =>
-          `**${item.nome}**: ${item.texto}`
-        ).join("\n\n") || "Ainda não há comentários.";
-      }
-
-      const totalPaginas = Math.max(1, Math.ceil(itens.length / tamanho));
-      const botoes = [];
-
-      if (pagina > 0) {
-        botoes.push(new ButtonBuilder()
-          .setCustomId(`${acao}:${postId}:${pagina - 1}`)
-          .setLabel("Anterior")
-          .setStyle(ButtonStyle.Secondary));
-      }
-
-      if (pagina + 1 < totalPaginas) {
-        botoes.push(new ButtonBuilder()
-          .setCustomId(`${acao}:${postId}:${pagina + 1}`)
-          .setLabel("Próxima")
-          .setStyle(ButtonStyle.Secondary));
-      }
-
-      const componentes = botoes.length
-        ? [new ActionRowBuilder().addComponents(botoes)]
-        : [];
-
-      const resposta = {
-        content: `**${acao === "likes" ? "Curtidas" : "Comentários"} — página ${pagina + 1}/${totalPaginas}**\n${texto}`.slice(0, 1900),
-        components: componentes,
-        ephemeral: true
-      };
-
-      if (interaction.replied || interaction.deferred) {
-        return interaction.update({
-          content: resposta.content,
-          components: resposta.components
-        });
-      }
-
-      return interaction.reply(resposta);
-    }
-
-    if (acao === "edit") {
-      if (interaction.user.id !== post.authorId && !dono(interaction)) {
-        return temporario(interaction, "Somente o autor ou um dono do bot pode editar esta publicação.");
-      }
-
-      const modal = new ModalBuilder()
-        .setCustomId(`editmodal:${postId}`)
-        .setTitle("Editar publicação");
-
-      const descricao = new TextInputBuilder()
-        .setCustomId("descricao")
-        .setLabel("Descrição")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(false)
-        .setMaxLength(1000)
-        .setValue(post.description || "");
-
-      const link = new TextInputBuilder()
-        .setCustomId("link")
-        .setLabel("URL opcional (https://...)")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(500)
-        .setValue(post.linkUrl || "");
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(descricao),
-        new ActionRowBuilder().addComponents(link)
-      );
-
-      return interaction.showModal(modal);
-    }
-
-    if (acao === "delete") {
-      if (interaction.user.id !== post.authorId && !dono(interaction)) {
-        return temporario(interaction, "Somente o autor ou um dono do bot pode excluir esta publicação.");
-      }
-
-      const canal = await client.channels.fetch(post.originalChannelId).catch(() => null);
-      const mensagem = canal ? await canal.messages.fetch(postId).catch(() => null) : null;
-
-      if (mensagem) await mensagem.delete().catch(() => {});
-      delete dados.posts[postId];
-      salvarDados();
-
-      return temporario(interaction, "Publicação excluída.");
-    }
-  } catch (erro) {
-    console.error("Erro na interação:", erro);
-
-    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: "Ocorreu um erro. Confira o console da hospedagem.",
-        ephemeral: true
-      }).catch(() => {});
-    }
-  }
-});
-
-// ==================== MODAIS ====================
-
-client.on("interactionCreate", async interaction => {
-  if (!interaction.isModalSubmit()) return;
-
-  try {
-    const [acao, id] = interaction.customId.split(":");
-
-    if (acao === "commentmodal") {
-      const post = dados.posts[id];
-      if (!post) return temporario(interaction, "Publicação não encontrada.");
-
-      const texto = interaction.fields.getTextInputValue("texto").trim();
-      if (!texto) return temporario(interaction, "O comentário não pode ficar vazio.");
-
-      post.comments.push({
-        userId: interaction.user.id,
-        nome: interaction.user.username,
-        texto,
-        createdAt: Date.now()
-      });
-      salvarDados();
-
-      return temporario(interaction, "Comentário adicionado!");
-    }
-
-    if (acao === "editmodal") {
-      const post = dados.posts[id];
-      if (!post) return temporario(interaction, "Publicação não encontrada.");
-
-      if (interaction.user.id !== post.authorId && !dono(interaction)) {
-        return temporario(interaction, "Você não pode editar esta publicação.");
-      }
-
-      const descricao = interaction.fields.getTextInputValue("descricao").trim();
-      const link = interaction.fields.getTextInputValue("link").trim();
-
-      if (link && !/^https?:\/\/\S+/i.test(link)) {
-        return temporario(interaction, "O link deve começar com https:// ou http://.");
-      }
-
-      post.description = descricao;
-      post.linkUrl = link;
-      post.linkEnabled = Boolean(link);
-      salvarDados();
-
-      const canal = await client.channels.fetch(post.originalChannelId).catch(() => null);
-      const mensagem = canal ? await canal.messages.fetch(id).catch(() => null) : null;
-
-      if (mensagem) {
-        await mensagem.edit({
-          embeds: [embedPost(post)],
-          components: botoesFeed(id, post)
-        });
-      }
-
-      return temporario(interaction, "Publicação atualizada!");
-    }
-
-    if (acao === "emojimodal") {
-      if (!dono(interaction)) return temporario(interaction, "Sem permissão.");
-
-      const valor = interaction.fields.getTextInputValue("valor").trim();
-      const nome = id;
-
-      if (!idEmoji(valor)) {
-        return temporario(interaction, "Não reconheci o ID. Use o ID numérico ou o formato <:nome:id> de um emoji personalizado.");
-      }
-
-      dados.emojis[nome] = valor;
-      salvarDados();
-      return temporario(interaction, `Emoji "${nome}" atualizado.`);
-    }
-
-    if (acao === "feedmodal") {
-      if (!dono(interaction) || interaction.user.id !== id) {
-        return temporario(interaction, "Sem permissão.");
-      }
-
-      const descricao = interaction.fields.getTextInputValue("descricao").trim();
-      const link = interaction.fields.getTextInputValue("url").trim();
-
-      if (link && !/^https?:\/\/\S+/i.test(link)) {
-        return temporario(interaction, "O link deve começar com https:// ou http://.");
-      }
-
-      dados.streaming.descricao = descricao;
-      dados.streaming.link = link;
-      salvarDados();
-
-      return temporario(interaction, "Configurações salvas. Elas ficam disponíveis para usar nas próximas funções do bot.");
-    }
-  } catch (erro) {
-    console.error("Erro ao processar modal:", erro);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: "Não consegui salvar essa alteração.",
-        ephemeral: true
-      }).catch(() => {});
-    }
-  }
-});
-
-// ==================== COMANDO z!s ====================
-
-client.on("messageCreate", async message => {
-  if (message.author.bot || !message.guild) return;
-  if (!message.content.trim().toLowerCase().startsWith("z!s")) return;
-
-  if (message.author.id !== DONO_ID) {
-    await message.reply("Somente o dono principal pode usar este comando.");
-    return;
-  }
-
-  const link = message.content.trim().split(/\s+/)[1] || dados.streaming.link;
-
-  const embed = new EmbedBuilder()
-    .setColor(0x242424)
-    .setTitle(dados.streaming.titulo || "Ao vivo")
-    .setDescription(
-      dados.streaming.descricao ||
-      "Acompanhe a transmissão pelo link abaixo."
+    await message.reply(
+      `Advertência ${level}/3 registrada para ${target.user.tag}. ` +
+      `Ação configurada: **${rule.acao}**.`
     );
 
-  const componentes = [];
-
-  if (link && /^https?:\/\/\S+/i.test(link)) {
-    componentes.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setLabel("Assistir")
-        .setStyle(ButtonStyle.Link)
-        .setURL(link)
-    ));
+    await logAction(
+      message.guild,
+      `⚠️ **Warn ${level}/3:** ${target.user.tag}\n` +
+      `**Motivo:** ${reason}\n` +
+      `**Moderador:** ${message.author.tag}`
+    );
   }
+});
+client.on('interactionCreate', async interaction => {
+  try {
+    // Comando /config.
+    if (
+      interaction.isChatInputCommand() &&
+      interaction.commandName === 'config'
+    ) {
+      if (!canConfigure(interaction)) {
+        return replyEphemeral(
+          interaction,
+          'Você não tem permissão para configurar o bot.'
+        );
+      }
 
-  await message.channel.send({
-    embeds: [embed],
-    components: componentes
-  });
+      return interaction.reply({
+        embeds: [configEmbed()],
+        components: [configMenu()],
+        flags: MessageFlags.Ephemeral
+      });
+    }
 
-  await message.delete().catch(() => {});
+    // Menu principal de configuração.
+    if (
+      interaction.isStringSelectMenu() &&
+      interaction.customId === 'cfg:area'
+    ) {
+      if (!canConfigure(interaction)) {
+        return replyEphemeral(interaction, 'Sem permissão.');
+      }
+
+      const choice = interaction.values[0];
+
+      if (choice === 'feed') {
+        return interaction.reply({
+          content: 'Escolha o canal do feed.',
+          components: [
+            new ActionRowBuilder().addComponents(
+              new ChannelSelectMenuBuilder()
+                .setCustomId('cfg:feedchannel')
+                .setPlaceholder('Selecionar canal de texto')
+                .setChannelTypes(ChannelType.GuildText)
+            )
+          ],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
+      if (choice === 'logs') {
+        return interaction.reply({
+          content: 'Escolha o canal de logs.',
+          components: [
+            new ActionRowBuilder().addComponents(
+              new ChannelSelectMenuBuilder()
+                .setCustomId('cfg:logschannel')
+                .setPlaceholder('Selecionar canal de logs')
+                .setChannelTypes(ChannelType.GuildText)
+            )
+          ],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
+      if (choice === 'antiban') {
+        return interaction.reply({
+          content: 'Escolha o tipo de cargo.',
+          components: [
+            new ActionRowBuilder().addComponents(
+              new StringSelectMenuBuilder()
+                .setCustomId('cfg:antibanrole')
+                .setPlaceholder('Configurar cargo')
+                .addOptions(
+                  {
+                    label: 'Cargo protegido',
+                    value: 'protected'
+                  },
+                  {
+                    label: 'Cargo autorizado',
+                    value: 'allowed'
+                  }
+                )
+            )
+          ],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
+      if (choice === 'filtros') {
+        return interaction.reply({
+          content: 'Selecione um filtro para ligar ou desligar.',
+          components: [toggleFilterMenu()],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
+      if (choice === 'emojis') {
+        return interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x6d28d9)
+              .setTitle('Emojis do feed')
+              .setDescription(
+                `${emojisText()}\n\n` +
+                'Edite os emojis usados no feed. ' +
+                'Os emojis de moderação permanecem fixos.'
+              )
+          ],
+          components: [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder()
+                .setCustomId('cfg:editemoji')
+                .setLabel('Editar emojis')
+                .setStyle(ButtonStyle.Primary)
+            )
+          ],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
+      if (choice === 'warns') {
+        return interaction.reply({
+          content: 'Escolha o nível de advertência.',
+          components: [
+            new ActionRowBuilder().addComponents(
+              new StringSelectMenuBuilder()
+                .setCustomId('cfg:warnlevel')
+                .setPlaceholder('Nível')
+                .addOptions(
+                  { label: 'Nível 1', value: '1' },
+                  { label: 'Nível 2', value: '2' },
+                  { label: 'Nível 3', value: '3' }
+                )
+            )
+          ],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
+      if (choice === 'banmsg') {
+        return interaction.reply({
+          content:
+            `Link de recurso atual: ` +
+            `${data.moderacao.linkRecurso || 'não configurado'}.`,
+          components: [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder()
+                .setCustomId('cfg:editappeal')
+                .setLabel('Editar link de recurso')
+                .setStyle(ButtonStyle.Primary)
+            )
+          ],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+    }
+
+    // Salvar canal selecionado.
+    if (
+      interaction.isChannelSelectMenu() &&
+      [
+        'cfg:feedchannel',
+        'cfg:logschannel'
+      ].includes(interaction.customId)
+    ) {
+      if (!canConfigure(interaction)) {
+        return replyEphemeral(interaction, 'Sem permissão.');
+      }
+
+      const channelId = interaction.values[0];
+
+      if (interaction.customId === 'cfg:feedchannel') {
+        data.canalId = channelId;
+      } else {
+        data.moderacao.canalLogsId = channelId;
+      }
+
+      saveData();
+
+      return replyEphemeral(
+        interaction,
+        `Canal salvo: <#${channelId}>.`
+      );
+    }
+
+    // Escolher qual cargo configurar no anti-ban.
+    if (
+      interaction.isStringSelectMenu() &&
+      interaction.customId === 'cfg:antibanrole'
+    ) {
+      if (!canConfigure(interaction)) {
+        return replyEphemeral(interaction, 'Sem permissão.');
+      }
+
+      const mode = interaction.values[0];
+
+      return interaction.reply({
+        content:
+          mode === 'protected'
+            ? 'Selecione o cargo protegido pelo anti-ban.'
+            : 'Selecione o cargo autorizado a banir membros protegidos.',
+        components: [
+          new ActionRowBuilder().addComponents(
+            new RoleSelectMenuBuilder()
+              .setCustomId(`cfg:role:${mode}`)
+              .setPlaceholder('Selecionar cargo')
+          )
+        ],
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    // Salvar cargo selecionado.
+    if (
+      interaction.isRoleSelectMenu() &&
+      interaction.customId.startsWith('cfg:role:')
+    ) {
+      if (!canConfigure(interaction)) {
+        return replyEphemeral(interaction, 'Sem permissão.');
+      }
+
+      const roleId = interaction.values[0];
+
+      if (interaction.customId.endsWith('protected')) {
+        data.moderacao.antiBan.cargoProtegidoId = roleId;
+      } else {
+        data.moderacao.antiBan.cargoAutorizadoId = roleId;
+      }
+
+      saveData();
+
+      return replyEphemeral(
+        interaction,
+        `Cargo salvo: <@&${roleId}>.`
+      );
+    }
+
+    // Ligar ou desligar filtros.
+    if (
+      interaction.isStringSelectMenu() &&
+      interaction.customId === 'cfg:togglefilter'
+    ) {
+      if (!canConfigure(interaction)) {
+        return replyEphemeral(interaction, 'Sem permissão.');
+      }
+
+      const key = interaction.values[0];
+
+      data.moderacao.filtros[key] =
+        !data.moderacao.filtros[key];
+
+      saveData();
+
+      return interaction.update({
+        content:
+          `Filtro **${key}** agora está **` +
+          `${data.moderacao.filtros[key] ? 'ativado' : 'desativado'}**.`,
+        components: [toggleFilterMenu()]
+      });
+    }
+
+    // Configurar ação por nível de advertência.
+    if (
+      interaction.isStringSelectMenu() &&
+      interaction.customId === 'cfg:warnlevel'
+    ) {
+      if (!canConfigure(interaction)) {
+        return replyEphemeral(interaction, 'Sem permissão.');
+      }
+
+      const level = interaction.values[0];
+      const rule = data.moderacao.advertencias[level];
+
+      const modal = new ModalBuilder()
+        .setCustomId(`cfg:warnmodal:${level}`)
+        .setTitle(`Advertência nível ${level}`);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('action')
+            .setLabel('Ação: warn, timeout, kick ou ban')
+            .setStyle(TextInputStyle.Short)
+            .setValue(rule.acao)
+            .setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('minutes')
+            .setLabel('Duração do timeout em minutos')
+            .setStyle(TextInputStyle.Short)
+            .setValue(String(rule.duracaoMinutos || 10))
+            .setRequired(true)
+        )
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    // Abrir formulário de edição dos emojis do feed.
+    if (
+      interaction.isButton() &&
+      interaction.customId === 'cfg:editemoji'
+    ) {
+      if (!canConfigure(interaction)) {
+        return replyEphemeral(interaction, 'Sem permissão.');
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId('cfg:emojimodal')
+        .setTitle('Editar emojis do feed');
+
+      for (const [key, value] of Object.entries(data.emojis).slice(0, 5)) {
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId(key)
+              .setLabel(key)
+              .setStyle(TextInputStyle.Short)
+              .setValue(value)
+              .setRequired(true)
+          )
+        );
+      }
+
+      return interaction.showModal(modal);
+    }
+
+    // Editar link para contestar um banimento.
+    if (
+      interaction.isButton() &&
+      interaction.customId === 'cfg:editappeal'
+    ) {
+      if (!canConfigure(interaction)) {
+        return replyEphemeral(interaction, 'Sem permissão.');
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId('cfg:appealmodal')
+        .setTitle('Link de recurso');
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('url')
+            .setLabel('URL de recurso/contestação')
+            .setStyle(TextInputStyle.Short)
+            .setValue(data.moderacao.linkRecurso || '')
+            .setRequired(false)
+        )
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    // Salvar configuração das advertências.
+    if (
+      interaction.isModalSubmit() &&
+      interaction.customId.startsWith('cfg:warnmodal:')
+    ) {
+      if (!canConfigure(interaction)) {
+        return replyEphemeral(interaction, 'Sem permissão.');
+      }
+
+      const level = interaction.customId.split(':').pop();
+      const action = interaction.fields
+        .getTextInputValue('action')
+        .toLowerCase()
+        .trim();
+
+      const minutes =
+        Number(interaction.fields.getTextInputValue('minutes')) || 10;
+
+      if (!['warn', 'timeout', 'kick', 'ban'].includes(action)) {
+        return replyEphemeral(
+          interaction,
+          'Ação inválida. Use warn, timeout, kick ou ban.'
+        );
+      }
+
+      data.moderacao.advertencias[level].acao = action;
+      data.moderacao.advertencias[level].duracaoMinutos =
+        Math.max(0, Math.min(40320, minutes));
+
+      saveData();
+
+      return replyEphemeral(
+        interaction,
+        `Nível ${level} salvo: ação **${action}**, duração ${minutes} minuto(s).`
+      );
+    }
+
+    // Salvar emojis do feed.
+    if (
+      interaction.isModalSubmit() &&
+      interaction.customId === 'cfg:emojimodal'
+    ) {
+      if (!canConfigure(interaction)) {
+        return replyEphemeral(interaction, 'Sem permissão.');
+      }
+
+      for (const key of ['like', 'lixo', 'insta', 'corao', 'link']) {
+        const value = interaction.fields
+          .getTextInputValue(key)
+          .trim();
+
+        if (value) {
+          data.emojis[key] = value.slice(0, 100);
+        }
+      }
+
+      saveData();
+
+      return replyEphemeral(
+        interaction,
+        'Emojis do feed atualizados. Os emojis de moderação continuam fixos.'
+      );
+    }
+
+    // Salvar link de recurso.
+    if (
+      interaction.isModalSubmit() &&
+      interaction.customId === 'cfg:appealmodal'
+    ) {
+      if (!canConfigure(interaction)) {
+        return replyEphemeral(interaction, 'Sem permissão.');
+      }
+
+      const url = interaction.fields
+        .getTextInputValue('url')
+        .trim();
+
+      if (url && !/^https?:\/\/\S+$/i.test(url)) {
+        return replyEphemeral(
+          interaction,
+          'Informe um link começando com http:// ou https://.'
+        );
+      }
+
+      data.moderacao.linkRecurso = url || null;
+      saveData();
+
+      return replyEphemeral(interaction, 'Link de recurso atualizado.');
+    }
+
+    // Botões do painel privado de streaming.
+    if (
+      interaction.isButton() &&
+      interaction.customId.startsWith('stream:')
+    ) {
+      if (!isOwner(interaction.user.id)) {
+        return replyEphemeral(
+          interaction,
+          'Somente o dono principal pode controlar o streaming.'
+        );
+      }
+
+      if (interaction.customId === 'stream:toggle') {
+        data.streaming.ativo = !data.streaming.ativo;
+        saveData();
+
+        await updateStreamingPresence();
+
+        return replyEphemeral(
+          interaction,
+          `Streaming ${data.streaming.ativo ? 'ativado' : 'desativado'}.`
+        );
+      }
+
+      if (interaction.customId === 'stream:edit') {
+        const modal = new ModalBuilder()
+          .setCustomId('stream:modal')
+          .setTitle('Editar presença de streaming');
+
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('title')
+              .setLabel('Título/status')
+              .setStyle(TextInputStyle.Short)
+              .setValue(data.streaming.titulo || 'Ao vivo')
+              .setRequired(true)
+          ),
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('description')
+              .setLabel('Descrição (opcional)')
+              .setStyle(TextInputStyle.Short)
+              .setValue(data.streaming.descricao || '')
+              .setRequired(false)
+          ),
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('url')
+              .setLabel('Link Twitch/YouTube válido')
+              .setStyle(TextInputStyle.Short)
+              .setValue(data.streaming.link || 'https://twitch.tv/')
+              .setRequired(true)
+          )
+        );
+
+        return interaction.showModal(modal);
+      }
+    }
+
+    // Salvar dados de streaming.
+    if (
+      interaction.isModalSubmit() &&
+      interaction.customId === 'stream:modal'
+    ) {
+      if (!isOwner(interaction.user.id)) {
+        return replyEphemeral(
+          interaction,
+          'Somente o dono principal pode controlar o streaming.'
+        );
+      }
+
+      const title = interaction.fields
+        .getTextInputValue('title')
+        .trim();
+
+      const description = interaction.fields
+        .getTextInputValue('description')
+        .trim();
+
+      const url = interaction.fields
+        .getTextInputValue('url')
+        .trim();
+
+      if (!/^https:\/\/(www\.)?(twitch\.tv|youtube\.com|youtu\.be)\//i.test(url)) {
+        return replyEphemeral(
+          interaction,
+          'Use um link HTTPS válido do Twitch ou YouTube.'
+        );
+      }
+
+      data.streaming.titulo = title.slice(0, 128);
+      data.streaming.descricao = description.slice(0, 128);
+      data.streaming.link = url;
+
+      saveData();
+      await updateStreamingPresence();
+
+      return replyEphemeral(interaction, 'Dados de streaming salvos.');
+    }
+  } catch (error) {
+    console.error('Erro na interação:', error);
+
+    if (interaction.isRepliable()) {
+      try {
+        await replyEphemeral(
+          interaction,
+          'Ocorreu um erro. Confira os logs da hospedagem e as permissões do bot.'
+        );
+      } catch {}
+    }
+  }
 });
 
-// ==================== INICIALIZAÇÃO ====================
+// Registro de mensagens excluídas.
+client.on('messageDelete', async message => {
+  if (
+    !data.moderacao.filtros.antiDelete ||
+    !message.guild ||
+    message.author?.bot
+  ) return;
 
-if (!TOKEN) {
-  console.error("Configure a variável de ambiente DISCORD_TOKEN na hospedagem.");
-} else {
-  client.login(TOKEN).catch(erro => {
-    console.error("Não consegui iniciar o bot. Confira o DISCORD_TOKEN:", erro.message);
-  });
+  const body =
+    message.content?.slice(0, 1500) ||
+    '[sem texto ou mensagem não estava em cache]';
+
+  await logAction(
+    message.guild,
+    `🗑️ **Mensagem excluída** em <#${message.channel.id}>\n` +
+    `**Autor:** ${message.author?.tag || 'desconhecido'}\n` +
+    `**Conteúdo:** ${body}`
+  );
+});
+
+// Detecção básica de possível raid.
+client.on('guildMemberAdd', async member => {
+  if (!data.moderacao.filtros.antiRaid) return;
+
+  const joinedRecently = member.guild.members.cache.filter(
+    m => Date.now() - m.joinedTimestamp < 15000
+  ).size;
+
+  if (joinedRecently >= 8) {
+    await logAction(
+      member.guild,
+      `🚨 Possível raid: ${joinedRecently} membros entraram em aproximadamente 15 segundos.`
+    );
+  }
+});
+
+client.on('error', console.error);
+
+process.on('unhandledRejection', error => {
+  console.error('Promise rejeitada:', error);
+});
+
+// O token deve ser configurado como variável de ambiente na hospedagem.
+if (!process.env.DISCORD_TOKEN) {
+  console.error(
+    'ERRO: configure a variável de ambiente DISCORD_TOKEN na hospedagem.'
+  );
+
+  process.exit(1);
 }
+
+client.login(process.env.DISCORD_TOKEN);
