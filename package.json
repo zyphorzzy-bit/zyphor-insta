@@ -2,7 +2,7 @@
 {
   "name": "zyphor-bot",
   "version": "1.0.0",
-  "description": "Bot de feed e mídias da Zyphor",
+  "description": "Zyphor Bot - moderacao, seguranca e feed",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -14,4 +14,3 @@
     "discord.js": "^14.19.3"
   }
 }
-
