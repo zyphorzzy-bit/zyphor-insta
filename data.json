@@ -1,1 +1,24 @@
 
+{
+  "canalId": null,
+  "posts": {},
+  "cooldowns": {},
+  "emojis": {
+    "like": "<:like:1552007813709172766>",
+    "lixo": "<:lixo:1552009637170253894>",
+    "insta": "<:insta:1552009638487138427>",
+    "corao": "<:corao:1552010611393700011>",
+    "link": "<:link:1552009621999452160>",
+    "posse": "<:posse:1552007807535153262>",
+    "digitar": "<:digitar:1550347102662434857>",
+    "cometrio": "<:cometrio:1552009642081788016>",
+    "config": "<:config:1552010601688080457>"
+  },
+  "streaming": {
+    "canalId": null,
+    "titulo": "Ao vivo",
+    "descricao": "",
+    "link": "",
+    "mensagemId": null
+  }
+}
