@@ -1,76 +1,10 @@
 
 {
-  "canalId": null,
-  "posts": {},
-  "cooldowns": {},
-  "emojis": {
-    "like": "<:like:1552007813709172766>",
-    "lixo": "<:lixo:1552009637170253894>",
-    "insta": "<:insta:1552009638487138427>",
-    "corao": "<:corao:1552010611393700011>",
-    "link": "<:link:1552009621999452160>",
-    "posse": "<:posse:1552007807535153262>",
-    "digitar": "<:digitar:1550347102662434857>",
-    "cometrio": "<:cometrio:1552009642081788016>",
-    "config": "<:config:1552010601688080457>"
-  },
-  "moderacao": {
-    "emojisFixos": {
-      "ban": "<:ban:1552761935945277472>",
-      "seguranca": "<:security:1552010618163167306>",
-      "escudo": "<:escudo:1552508771228450856>",
-      "alerta": "<a:alerta:1552007804569653360>",
-      "warn1": "<:warn1:1550347449925894196>",
-      "warn2": "<:warn2:1550347452446408754>",
-      "warn3": "<:warn3:1550347451070943254>",
-      "aceito": "<:aceito:1552508777943539843>",
-      "recusado": "<:recusado:1552508774462398484>",
-      "proibido": "<:proibido:1552010616280064092>",
-      "protecao": "<:Secured:1550347097318883360>"
-    },
-    "antiBan": {
-      "ativo": true,
-      "cargoProtegidoId": null,
-      "cargoAutorizadoId": null
-    },
-    "advertencias": {
-      "1": {
-        "cargoId": null,
-        "acao": "warn",
-        "duracaoMinutos": 0
-      },
-      "2": {
-        "cargoId": null,
-        "acao": "timeout",
-        "duracaoMinutos": 10
-      },
-      "3": {
-        "cargoId": null,
-        "acao": "kick",
-        "duracaoMinutos": 0
-      }
-    },
-    "filtros": {
-      "antiFlood": true,
-      "antiSpam": true,
-      "antiGif": false,
-      "antiSticker": false,
-      "antiRaid": true,
-      "antiGrief": false,
-      "antiLink": false,
-      "antiDelete": true
-    },
-    "canalLogsId": null,
-    "linkRecurso": null
-  },
-  "painel": {
-    "canalConfigId": null,
-    "mensagemConfigId": null
-  },
-  "streaming": {
-    "titulo": "Ao vivo",
-    "descricao": "",
-    "link": "https://twitch.tv/",
-    "ativo": false
+  "guilds": {},
+  "global": {
+    "owners": [
+      "1541239768010981378",
+      "1533306874513068093"
+    ]
   }
 }
