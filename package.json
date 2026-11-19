@@ -1,16 +1,13 @@
 
 {
-  "name": "zyphor-bot",
+  "name": "cemetery",
   "version": "1.0.0",
-  "description": "Zyphor Bot - moderacao, seguranca e feed",
+  "description": "Cemetery Discord Social Feed",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "engines": {
-    "node": ">=20"
-  },
   "dependencies": {
-    "discord.js": "^14.19.3"
+    "discord.js": "^14.25.1"
   }
 }
